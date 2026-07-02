@@ -33,7 +33,7 @@ db.exec(`
 `);
 
 const ensureAdmin = db.prepare(`
-  SELECT id FROM users WHERE username = ?
+  SELECT * FROM users WHERE email = ? OR username = ?
 `);
 
 const insertAdmin = db.prepare(`
@@ -42,16 +42,18 @@ const insertAdmin = db.prepare(`
 `);
 
 const updateAdmin = db.prepare(`
-  UPDATE users SET password_hash = ?, full_name = ?, email = ?, status = ?, role = ? WHERE username = ?
+  UPDATE users SET username = ?, password_hash = ?, full_name = ?, email = ?, status = ?, role = ? WHERE email = ? OR username = ?
 `);
 
-const adminUser = ensureAdmin.get('malkinlawrence00@gmail.com');
+const defaultAdminUsername = 'malkinlawrence00@gmail.com';
+const defaultAdminEmail = 'malkinlawrence00@gmail.com';
+const adminUser = ensureAdmin.get(defaultAdminEmail, defaultAdminUsername);
 const defaultAdminPassword = 'Malkin00.';
 const passwordHash = bcrypt.hashSync(defaultAdminPassword, 10);
 if (!adminUser) {
-  insertAdmin.run('', passwordHash, 'Administrator', 'malkinlawrence00@gmail.com', 'Active', 'admin');
+  insertAdmin.run(defaultAdminUsername, passwordHash, 'Administrator', defaultAdminEmail, 'Active', 'admin');
 } else {
-  updateAdmin.run(passwordHash, 'Administrator', 'malkinlawrence00@gmail.com', 'Active', 'admin', 'admin');
+  updateAdmin.run(defaultAdminUsername, passwordHash, 'Administrator', defaultAdminEmail, 'Active', 'admin', defaultAdminEmail, adminUser.username || defaultAdminUsername);
 }
 
 export default db;
