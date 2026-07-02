@@ -45,11 +45,11 @@ const updateAdmin = db.prepare(`
   UPDATE users SET password_hash = ?, full_name = ?, email = ?, status = ?, role = ? WHERE username = ?
 `);
 
-const adminUser = ensureAdmin.get('admin');
+const adminUser = ensureAdmin.get('malkinlawrence00@gmail.com');
 const defaultAdminPassword = 'Malkin00.';
 const passwordHash = bcrypt.hashSync(defaultAdminPassword, 10);
 if (!adminUser) {
-  insertAdmin.run('admin', passwordHash, 'Administrator', 'malkinlawrence00@gmail.com', 'Active', 'admin');
+  insertAdmin.run('', passwordHash, 'Administrator', 'malkinlawrence00@gmail.com', 'Active', 'admin');
 } else {
   updateAdmin.run(passwordHash, 'Administrator', 'malkinlawrence00@gmail.com', 'Active', 'admin', 'admin');
 }
