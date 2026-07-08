@@ -1,4 +1,7 @@
-const API_BASE_URL = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
+const configuredApiUrl = import.meta.env.VITE_API_URL || '';
+const API_BASE_URL = configuredApiUrl && !/localhost|127\.0\.0\.1/i.test(configuredApiUrl)
+  ? configuredApiUrl.replace(/\/$/, '')
+  : '/api';
 
 function buildApiUrl(path: string) {
   if (/^https?:\/\//i.test(path)) {
@@ -19,17 +22,34 @@ async function request(path: string, options: RequestInit = {}, requiresAuth = f
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const response = await fetch(buildApiUrl(path), {
-    ...options,
-    headers,
-  });
+  const url = buildApiUrl(path);
+  console.info(`[api] ${options.method || 'GET'} ${url}`);
 
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(data.message || 'Request failed');
+  try {
+    const response = await fetch(url, {
+      ...options,
+      headers,
+    });
+
+    const responseText = await response.text();
+    let data: Record<string, unknown> = {};
+    try {
+      data = responseText ? JSON.parse(responseText) : {};
+    } catch {
+      data = { message: responseText || 'Request failed' };
+    }
+
+    console.info(`[api] ${response.status} ${url}`, data);
+
+    if (!response.ok) {
+      throw new Error((data.message as string) || 'Request failed');
+    }
+
+    return data;
+  } catch (error) {
+    console.error(`[api] request failed for ${path}`, error);
+    throw error;
   }
-
-  return data;
 }
 
 export const adminLogin = (email: string, password: string) => request('/admin/login', { method: 'POST', body: JSON.stringify({ email, password }) });

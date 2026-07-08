@@ -16,8 +16,8 @@ function PremiumDashboardPage() {
 
     const load = async () => {
       try {
-        const response = await getCurrentUser();
-        setUser(response.user);
+        const response = await getCurrentUser() as { user?: { fullName?: string; username?: string } };
+        setUser(response.user ?? null);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unable to load account.');
         localStorage.removeItem('authToken');

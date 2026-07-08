@@ -48,7 +48,7 @@ function AdminPage() {
     setLoading(true);
     setMessage(null);
     try {
-      const response = await getAdminUsers();
+      const response = await getAdminUsers() as { users?: UserRecord[] };
       setUsers(response.users || []);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to load users.');

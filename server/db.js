@@ -5,7 +5,8 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const dbPath = path.join(__dirname, 'database.sqlite');
+const defaultDbPath = process.env.SQLITE_DB_PATH || (process.env.VERCEL ? '/tmp/database.sqlite' : path.join(__dirname, 'database.sqlite'));
+const dbPath = defaultDbPath;
 
 const db = new Database(dbPath);
 

@@ -34,7 +34,7 @@ function AdminLoginPage() {
     setError(null);
 
     try {
-      const response = await adminLogin(email, password);
+      const response = await adminLogin(email, password) as { token: string; user: { role: string } };
       localStorage.setItem('authToken', response.token);
       localStorage.setItem('authRole', response.user.role);
 

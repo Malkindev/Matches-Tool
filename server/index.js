@@ -18,73 +18,94 @@ import {
 
 export function createApp() {
   const app = express();
-  app.use(cors());
+  app.use(cors({ origin: true, credentials: true }));
+  app.options('*', cors({ origin: true, credentials: true }));
   app.use(express.json());
 
+  app.use((req, res, next) => {
+    console.info(`[server] ${req.method} ${req.originalUrl}`);
+    next();
+  });
+
   app.get('/api/health', (req, res) => {
-    res.json({ ok: true });
+    res.json({ ok: true, environment: process.env.VERCEL ? 'vercel' : 'local' });
   });
 
   app.post('/api/admin/login', async (req, res) => {
-    const { email, password } = req.body;
-    if (!email || !password) {
-      return res.status(400).json({ message: 'Email and password are required.' });
-    }
+    try {
+      const { email, password } = req.body;
+      if (!email || !password) {
+        return res.status(400).json({ message: 'Email and password are required.' });
+      }
 
-    const user = db.prepare('SELECT * FROM users WHERE email = ? AND role = ?').get(email, 'admin');
-    if (!user) {
-      return res.status(401).json({ message: 'Invalid credentials.' });
-    }
+      const user = db.prepare('SELECT * FROM users WHERE email = ? AND role = ?').get(email, 'admin');
+      if (!user) {
+        return res.status(401).json({ message: 'Invalid credentials.' });
+      }
 
-    const passwordMatches = await comparePassword(password, user.password_hash);
-    if (!passwordMatches) {
-      return res.status(401).json({ message: 'Invalid credentials.' });
-    }
+      const passwordMatches = await comparePassword(password, user.password_hash);
+      if (!passwordMatches) {
+        return res.status(401).json({ message: 'Invalid credentials.' });
+      }
 
-    const token = signToken({ id: user.id, username: user.username, role: user.role });
-    res.json({ token, user: { id: user.id, username: user.username, role: user.role, email: user.email, fullName: user.full_name } });
+      const token = signToken({ id: user.id, username: user.username, role: user.role });
+      return res.json({ token, user: { id: user.id, username: user.username, role: user.role, email: user.email, fullName: user.full_name } });
+    } catch (error) {
+      console.error('[server] admin login failed', error);
+      return res.status(500).json({ message: 'Admin login failed.', error: error.message });
+    }
   });
 
   app.post('/api/login', async (req, res) => {
-    const { username, password } = req.body;
-    if (!username || !password) {
-      return res.status(400).json({ message: 'Username and password are required.' });
-    }
+    try {
+      const { username, password } = req.body;
+      if (!username || !password) {
+        return res.status(400).json({ message: 'Username and password are required.' });
+      }
 
-    const user = getUserByUsername(username);
-    if (!user) {
-      return res.status(401).json({ message: 'Invalid credentials.' });
-    }
+      const user = getUserByUsername(username);
+      if (!user) {
+        return res.status(401).json({ message: 'Invalid credentials.' });
+      }
 
-    const passwordMatches = await comparePassword(password, user.password_hash);
-    if (!passwordMatches) {
-      return res.status(401).json({ message: 'Invalid credentials.' });
-    }
+      const passwordMatches = await comparePassword(password, user.password_hash);
+      if (!passwordMatches) {
+        return res.status(401).json({ message: 'Invalid credentials.' });
+      }
 
-    if (user.status !== 'Active') {
-      return res.status(403).json({ message: 'Your account is inactive. Contact support.' });
-    }
+      if (user.status !== 'Active') {
+        return res.status(403).json({ message: 'Your account is inactive. Contact support.' });
+      }
 
-    const expiry = user.subscription_expiry ? new Date(user.subscription_expiry) : null;
-    const now = new Date();
-    if (expiry && expiry < now) {
-      return res.status(403).json({ message: 'Your subscription has expired. Please contact the administrator to renew.' });
-    }
+      const expiry = user.subscription_expiry ? new Date(user.subscription_expiry) : null;
+      const now = new Date();
+      if (expiry && expiry < now) {
+        return res.status(403).json({ message: 'Your subscription has expired. Please contact the administrator to renew.' });
+      }
 
-    const token = signToken({ id: user.id, username: user.username, role: user.role });
-    res.json({ token, user: { id: user.id, username: user.username, role: user.role, fullName: user.full_name, email: user.email, status: user.status, subscriptionExpiry: user.subscription_expiry } });
+      const token = signToken({ id: user.id, username: user.username, role: user.role });
+      return res.json({ token, user: { id: user.id, username: user.username, role: user.role, fullName: user.full_name, email: user.email, status: user.status, subscriptionExpiry: user.subscription_expiry } });
+    } catch (error) {
+      console.error('[server] login failed', error);
+      return res.status(500).json({ message: 'Login failed.', error: error.message });
+    }
   });
 
   app.get('/api/me', authenticate, (req, res) => {
-    const user = getUserById(req.user.id);
-    if (!user) {
-      return res.status(404).json({ message: 'User not found.' });
+    try {
+      const user = getUserById(req.user.id);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found.' });
+      }
+      return res.json({ user: { id: user.id, username: user.username, role: user.role, fullName: user.full_name, email: user.email, status: user.status, subscriptionExpiry: user.subscription_expiry } });
+    } catch (error) {
+      console.error('[server] /api/me failed', error);
+      return res.status(500).json({ message: 'Failed to load user.', error: error.message });
     }
-    res.json({ user: { id: user.id, username: user.username, role: user.role, fullName: user.full_name, email: user.email, status: user.status, subscriptionExpiry: user.subscription_expiry } });
   });
 
   app.get('/api/admin/users', authenticate, requireAdmin, (req, res) => {
-    res.json({ users: listUsers() });
+    return res.json({ users: listUsers() });
   });
 
   app.post('/api/admin/users', authenticate, requireAdmin, async (req, res) => {
@@ -100,9 +121,10 @@ export function createApp() {
       }
 
       const user = await createUser({ username, password, fullName, email, status, subscriptionExpiry, role });
-      res.status(201).json({ user });
+      return res.status(201).json({ user });
     } catch (error) {
-      res.status(500).json({ message: 'Failed to create user.', error: error.message });
+      console.error('[server] create user failed', error);
+      return res.status(500).json({ message: 'Failed to create user.', error: error.message });
     }
   });
 
@@ -117,18 +139,20 @@ export function createApp() {
         updatedUser = await updateUser(userId, { password_hash: passwordHash });
       }
 
-      res.json({ user: updatedUser });
+      return res.json({ user: updatedUser });
     } catch (error) {
-      res.status(500).json({ message: 'Failed to update user.', error: error.message });
+      console.error('[server] update user failed', error);
+      return res.status(500).json({ message: 'Failed to update user.', error: error.message });
     }
   });
 
   app.delete('/api/admin/users/:id', authenticate, requireAdmin, (req, res) => {
     try {
       deleteUser(Number(req.params.id));
-      res.json({ success: true });
+      return res.json({ success: true });
     } catch (error) {
-      res.status(500).json({ message: 'Failed to delete user.', error: error.message });
+      console.error('[server] delete user failed', error);
+      return res.status(500).json({ message: 'Failed to delete user.', error: error.message });
     }
   });
 
@@ -141,10 +165,16 @@ export function createApp() {
       }
       const passwordHash = await import('bcryptjs').then(({ default: bcrypt }) => bcrypt.hash(password, 10));
       const user = await updateUser(userId, { password_hash: passwordHash });
-      res.json({ success: true, user });
+      return res.json({ success: true, user });
     } catch (error) {
-      res.status(500).json({ message: 'Failed to reset user password.', error: error.message });
+      console.error('[server] reset password failed', error);
+      return res.status(500).json({ message: 'Failed to reset user password.', error: error.message });
     }
+  });
+
+  app.use((err, req, res, next) => {
+    console.error('[server] uncaught error', err);
+    res.status(500).json({ message: 'Internal server error.', error: err.message });
   });
 
   return app;
@@ -160,4 +190,6 @@ if (isDirectRun) {
   });
 }
 
-export default app;
+export default function handler(req, res) {
+  return app(req, res);
+}

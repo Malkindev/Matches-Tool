@@ -34,7 +34,7 @@ function LoginPage() {
     setError(null);
 
     try {
-      const response = await customerLogin(username, password);
+      const response = await customerLogin(username, password) as { token: string; user: { role: string } };
       localStorage.setItem('authToken', response.token);
       localStorage.setItem('authRole', response.user.role);
 
