@@ -10,10 +10,13 @@ import {
   deleteUser,
   getUserById,
   getUserByUsername,
+  getAdminByEmail,
   listUsers,
   requireAdmin,
   signToken,
   updateUser,
+  ensureAdmin,
+  hashPassword,
 } from './auth.js';
 
 export function createApp() {
@@ -91,7 +94,7 @@ export function createApp() {
     }
   });
 
-  app.get('/api/me', authenticate, (req, res) => {
+  app.get('/api/me', authenticate, async (req, res) => {
     try {
       const user = await getUserById(req.user.id);
       if (!user) {
@@ -120,7 +123,8 @@ export function createApp() {
         return res.status(409).json({ message: 'Username already exists.' });
       }
 
-      const passwordHash = await hashPassword(password);\n      const user = await createUser({ username, passwordHash, fullName, email, status, subscriptionExpiry, role });
+      const passwordHash = await hashPassword(password);
+      const user = await createUser({ username, passwordHash, fullName, email, status, subscriptionExpiry, role });
       return res.status(201).json({ user });
     } catch (error) {
       console.error('[server] create user failed', error);
@@ -135,8 +139,8 @@ export function createApp() {
 
       let updatedUser = await updateUser(userId, updates);
       if (password) {
-        const passwordHash = await import('bcryptjs').then(({ default: bcrypt }) => bcrypt.hash(password, 10));
-        updatedUser = await updateUser(userId, { password_hash: passwordHash });
+        const passwordHash = await hashPassword(password);
+        updatedUser = await updateUser(userId, { passwordHash });
       }
 
       return res.json({ user: updatedUser });
@@ -146,7 +150,7 @@ export function createApp() {
     }
   });
 
-  app.delete('/api/admin/users/:id', authenticate, requireAdmin, (req, res) => {
+  app.delete('/api/admin/users/:id', authenticate, requireAdmin, async (req, res) => {
     try {
       await deleteUser(Number(req.params.id));
       return res.json({ success: true });
@@ -163,8 +167,8 @@ export function createApp() {
       if (!password) {
         return res.status(400).json({ message: 'A new password is required.' });
       }
-      const passwordHash = await import('bcryptjs').then(({ default: bcrypt }) => bcrypt.hash(password, 10));
-      const user = await updateUser(userId, { password_hash: passwordHash });
+      const passwordHash = await hashPassword(password);
+      const user = await updateUser(userId, { passwordHash });
       return res.json({ success: true, user });
     } catch (error) {
       console.error('[server] reset password failed', error);
@@ -180,7 +184,13 @@ export function createApp() {
   return app;
 }
 
-const app = createApp();\n\n// Initialize the persistent store before serving requests. Supabase is used on Vercel when configured.\nconst storeReady = ensureAdmin().catch((error) => {\n  console.error('[server] storage initialization failed', { mode: storageMode, error: error.message });\n  return error;\n});
+const app = createApp();
+
+// Initialize the persistent store before serving requests.
+const storeReady = ensureAdmin().catch((error) => {
+  console.error('[server] storage initialization failed', { mode: storageMode, error: error.message });
+  return error;
+});
 const PORT = process.env.PORT || 3001;
 const isDirectRun = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
@@ -190,6 +200,10 @@ if (isDirectRun) {
   });
 }
 
-export default function handler(req, res) {
+export default async function handler(req, res) {
+  const initError = await storeReady;
+  if (initError) {
+    return res.status(500).json({ message: 'Persistent storage is not configured or unavailable.', error: initError.message });
+  }
   return app(req, res);
 }
