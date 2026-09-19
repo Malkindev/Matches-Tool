@@ -22,7 +22,7 @@ const supabase = useSupabase
 
 const localDbPath =
   process.env.SQLITE_DB_PATH ||
-  path.join(__dirname, 'database.sqlite');
+  (process.env.VERCEL ? '/tmp/matches-tool.sqlite' : path.join(__dirname, 'database.sqlite'));
 
 let localDb = null;
 
