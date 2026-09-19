@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import db from './db.js';
+import { storageMode } from './store.js';
 import {
   authenticate,
   comparePassword,
@@ -38,7 +38,7 @@ export function createApp() {
         return res.status(400).json({ message: 'Email and password are required.' });
       }
 
-      const user = db.prepare('SELECT * FROM users WHERE email = ? AND role = ?').get(email, 'admin');
+      const user = await getAdminByEmail(email);
       if (!user) {
         return res.status(401).json({ message: 'Invalid credentials.' });
       }
@@ -63,7 +63,7 @@ export function createApp() {
         return res.status(400).json({ message: 'Username and password are required.' });
       }
 
-      const user = getUserByUsername(username);
+      const user = await getUserByUsername(username);
       if (!user) {
         return res.status(401).json({ message: 'Invalid credentials.' });
       }
@@ -93,7 +93,7 @@ export function createApp() {
 
   app.get('/api/me', authenticate, (req, res) => {
     try {
-      const user = getUserById(req.user.id);
+      const user = await getUserById(req.user.id);
       if (!user) {
         return res.status(404).json({ message: 'User not found.' });
       }
@@ -105,7 +105,7 @@ export function createApp() {
   });
 
   app.get('/api/admin/users', authenticate, requireAdmin, (req, res) => {
-    return res.json({ users: listUsers() });
+    return listUsers().then((users) => res.json({ users })).catch((error) => res.status(500).json({ message: 'Failed to load users.', error: error.message }));
   });
 
   app.post('/api/admin/users', authenticate, requireAdmin, async (req, res) => {
@@ -115,12 +115,12 @@ export function createApp() {
         return res.status(400).json({ message: 'Username and password are required.' });
       }
 
-      const existing = getUserByUsername(username);
+      const existing = await getUserByUsername(username);
       if (existing) {
         return res.status(409).json({ message: 'Username already exists.' });
       }
 
-      const user = await createUser({ username, password, fullName, email, status, subscriptionExpiry, role });
+      const passwordHash = await hashPassword(password);\n      const user = await createUser({ username, passwordHash, fullName, email, status, subscriptionExpiry, role });
       return res.status(201).json({ user });
     } catch (error) {
       console.error('[server] create user failed', error);
@@ -148,7 +148,7 @@ export function createApp() {
 
   app.delete('/api/admin/users/:id', authenticate, requireAdmin, (req, res) => {
     try {
-      deleteUser(Number(req.params.id));
+      await deleteUser(Number(req.params.id));
       return res.json({ success: true });
     } catch (error) {
       console.error('[server] delete user failed', error);
@@ -180,7 +180,7 @@ export function createApp() {
   return app;
 }
 
-const app = createApp();
+const app = createApp();\n\n// Initialize the persistent store before serving requests. Supabase is used on Vercel when configured.\nconst storeReady = ensureAdmin().catch((error) => {\n  console.error('[server] storage initialization failed', { mode: storageMode, error: error.message });\n  return error;\n});
 const PORT = process.env.PORT || 3001;
 const isDirectRun = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
