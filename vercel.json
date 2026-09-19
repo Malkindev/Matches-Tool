@@ -18,10 +18,6 @@
       "handle": "filesystem"
     },
     {
-      "src": "^/api/login/?$",
-      "dest": "/api/login.js"
-    },
-    {
       "src": "^/api/(.*)$",
       "dest": "/api/index.js?__path=$1"
     },
