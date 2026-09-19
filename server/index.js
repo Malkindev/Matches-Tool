@@ -19,7 +19,7 @@ import {
 export function createApp() {
   const app = express();
   app.use(cors({ origin: true, credentials: true }));
-  app.options('*', cors({ origin: true, credentials: true }));
+  app.options('/{*splat}', cors({ origin: true, credentials: true }));
   app.use(express.json());
 
   app.use((req, res, next) => {
